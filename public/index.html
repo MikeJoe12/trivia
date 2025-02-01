@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trivia Game - Host Panel</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        .qr-container {
+            position: absolute;
+            left: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #qr-code {
+            max-width: 80px;
+            max-height: 80px;
+            margin-bottom: 0px;
+        }
+        h1, h2, h3 {
+            color: #1a73e8;
+            text-align: center;
+            margin: 0;
+        }
+        .section {
+            margin: 15px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        button {
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        button:hover:not(:disabled) {
+            background-color: #1557b0;
+        }
+        .file-upload {
+            text-align: center;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .file-upload label {
+            background-color: #1a73e8;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+            display: inline-block;
+        }
+        .file-upload label:hover {
+            background-color: #1557b0;
+        }
+        #fileInfo {
+            margin-top: 10px;
+            color: #666;
+        }
+        .player-list {
+            margin-top: 15px;
+        }
+        .player-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            margin: 5px 0;
+            background-color: white;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        #resetButton {
+            background-color: #dc3545;
+        }
+        #resetButton:hover {
+            background-color: #c82333;
+        }
+        .final-scores {
+            background-color: #e8f0fe;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .score-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            margin: 5px 0;
+            background-color: white;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .winner {
+            background-color: #ffd700;
+            color: #000;
+        }
+        .question-summary {
+            background-color: #fff;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border: 1px solid #e1e1e1;
+        }
+        .question-text {
+            font-size: 16px;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            text-align: right;
+            direction: rtl;
+        }
+        .correct-answer {
+            color: #28a745;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .player-answers {
+            margin-top: 10px;
+        }
+        .player-answer {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 10px;
+            margin: 5px 0;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .player-answer.correct {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .player-answer.incorrect {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="qr-container">
+                <img src="QRCode.png" alt="Scan Me" id="qr-code">
+            </div>
+            <h1>Mishail's Trivia Game</h1>
+        </div>
+
+        <div class="section">
+            <div class="file-upload">
+                <label for="questionFile">Choose Excel File</label>
+                <input type="file" id="questionFile" accept=".xlsx,.xls" onchange="handleFileUpload(event)">
+                <div id="fileInfo"></div>
+            </div>
+
+            <div class="controls">
+                <button id="startButton" onclick="startGame()" disabled>Start Game</button>
+                <button id="endButton" onclick="endGame()" disabled>End Game</button>
+                <button id="resetButton" onclick="resetGame()">Reset Game</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Players</h2>
+            <div id="playerList" class="player-list"></div>
+        </div>
+
+        <div class="section" id="resultsSection" style="display: none;">
+            <h2>Game Results</h2>
+            
+            <div class="final-scores" id="final-scores"></div>
+            <div id="questionAnalysis"></div>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        let questions = [];
+        let isGameActive = false;
+        let currentFileName = ''; // Variable to store the filename
+
+        function connectWebSocket() {
+            ws = new WebSocket(`ws://${window.location.hostname}:3000`);
+            
+            ws.onopen = () => {
+                console.log('Connected to server');
+                ws.send(JSON.stringify({ type: 'host_connect' }));
+            };
+
+            ws.onclose = () => {
+                setTimeout(connectWebSocket, 3000);
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            };
+        }
+
+        async function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Store the filename
+            currentFileName = file.name;
+
+            try {
+                const data = await file.arrayBuffer();
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+
+                questions = jsonData.map(row => ({
+                    question: String(row.question || '').trim(),
+                    correct_answer: String(row.correct_answer || '').trim(),
+                    options: [
+                        String(row.option1 || '').trim(),
+                        String(row.option2 || '').trim(),
+                        String(row.option3 || '').trim(),
+                        String(row.option4 || '').trim()
+                    ]
+                }));
+
+                if (questions.length === 0) {
+                    throw new Error('No questions found in file');
+                }
+
+                // Validate questions
+                const invalidQuestions = questions.filter(q => 
+                    !q.question || !q.correct_answer || 
+                    q.options.some(opt => !opt) || 
+                    q.options.length !== 4
+                );
+
+                if (invalidQuestions.length > 0) {
+                    throw new Error('Invalid question format found');
+                }
+
+                // Update file info with filename and number of questions
+                document.getElementById('fileInfo').textContent = `${currentFileName}: ${questions.length} questions loaded`;
+                document.getElementById('startButton').disabled = false;
+            } catch (error) {
+                console.error('Error processing file:', error);
+                document.getElementById('fileInfo').textContent = `Error: ${error.message}`;
+                questions = [];
+                currentFileName = '';
+                document.getElementById('startButton').disabled = true;
+            }
+        }
+
+        function handleWebSocketMessage(data) {
+            switch (data.type) {
+                case 'player_list':
+                    updatePlayerList(data.players);
+                    break;
+                case 'game_ended':
+                    isGameActive = false;
+                    updatePlayerList(data.results);
+                    showResults(data.results, questions);
+                    document.getElementById('startButton').disabled = false;
+                    document.getElementById('endButton').disabled = true;
+                    document.getElementById('resultsSection').style.display = 'block';
+                    break;
+            }
+        }
+
+        function updatePlayerList(players) {
+            const playerList = document.getElementById('playerList');
+            playerList.innerHTML = players.map(player => `
+                <div class="player-item">
+                    <span>${player.name}</span>
+                    <span>${player.score || 0} points</span>
+                </div>
+            `).join('');
+        }
+
+        function showResults(results, questionsList) {
+            // Sort results by score in descending order
+            const sortedResults = results.sort((a, b) => b.score - a.score);
+            
+            // Show final scores
+            const scoresHtml = sortedResults.map((player, index) => `
+                <div class="score-item ${index === 0 ? 'winner' : ''}">
+                    <span>#${index + 1} ${player.name}</span>
+                    <span>${player.score}/${questionsList.length} correct</span>
+                </div>
+            `).join('');
+            
+            document.getElementById('final-scores').innerHTML = `
+                <h3>Final Scores</h3>
+                ${scoresHtml}
+            `;
+
+            // Show detailed question analysis
+            const analysisHtml = questionsList.map((question, qIndex) => {
+                const playerAnswers = results.map(player => {
+                    const isCorrect = player.answers[qIndex] === question.correct_answer;
+                    return `
+                        <div class="player-answer ${isCorrect ? 'correct' : 'incorrect'}">
+                            <span>${player.name}</span>
+                            <span>${player.answers[qIndex] || 'No answer'}</span>
+                        </div>
+                    `;
+                }).join('');
+
+                return `
+                    <div class="question-summary">
+                        <h4>Question ${qIndex + 1}</h4>
+                        <div class="question-text">${question.question}</div>
+                        <div class="correct-answer">Correct Answer: ${question.correct_answer}</div>
+                        <div class="player-answers">
+                            <h5>Player Answers:</h5>
+                            ${playerAnswers}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('questionAnalysis').innerHTML = analysisHtml;
+        }
+
+        function startGame() {
+            if (questions.length === 0) {
+                alert('Please upload questions first');
+                return;
+            }
+
+            isGameActive = true;
+            document.getElementById('startButton').disabled = true;
+            document.getElementById('endButton').disabled = false;
+            document.getElementById('resultsSection').style.display = 'none';
+
+            ws.send(JSON.stringify({
+                type: 'start_game',
+                questions: questions
+            }));
+        }
+
+        function endGame() {
+            if (!isGameActive) return;
+            
+            isGameActive = false;
+            document.getElementById('endButton').disabled = true;
+            ws.send(JSON.stringify({ type: 'end_game' }));
+        }
+
+        function resetGame() {
+            if (confirm('Are you sure you want to reset the game? This will disconnect all players.')) {
+                // Clear local state
+                questions = [];
+                isGameActive = false;
+                currentFileName = '';
+                
+                // Reset UI elements
+                document.getElementById('startButton').disabled = true;
+                document.getElementById('endButton').disabled = true;
+                document.getElementById('questionFile').value = '';
+                document.getElementById('fileInfo').textContent = '';
+                document.getElementById('playerList').innerHTML = '';
+                document.getElementById('resultsSection').style.display = 'none';
+                document.getElementById('questionAnalysis').innerHTML = '';
+
+                // Tell server to reset and force disconnect all players
+                ws.send(JSON.stringify({ type: 'reset_game' }));
+            }
+        }
+
+        // Initialize WebSocket connection
+        connectWebSocket();
+    </script>
+</body>
+</html>

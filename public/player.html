@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mishail's Trivia Game</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 10px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #1a73e8;
+            text-align: center;
+            margin: 10px 0;
+        }
+        .login-form {
+            margin: 15px 0;
+            padding: 15px;
+            background-color: #e8f0fe;
+            border-radius: 8px;
+            text-align: center;
+        }
+        input {
+            width: 90%;
+            max-width: 300px;
+            padding: 12px;
+            margin: 10px 0;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+            width: 90%;
+            max-width: 300px;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        button:hover:not(:disabled) {
+            background-color: #1557b0;
+        }
+        .game-area {
+            display: none;
+        }
+        .question-container {
+            margin: 15px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+        .question-text {
+            font-size: 18px;
+            margin: 10px 0;
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 5px;
+            text-align: right;
+            direction: rtl;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .timer {
+            text-align: center;
+            font-size: 20px;
+            margin: 10px 0;
+            color: #1a73e8;
+            font-weight: bold;
+        }
+        .timer.urgent {
+            color: #dc3545;
+        }
+        .options-container {
+            display: grid;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .option {
+            padding: 15px;
+            background-color: #fff;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+            text-align: right;
+            direction: rtl;
+            transition: all 0.3s;
+            font-size: 16px;
+        }
+        .option:hover {
+            background-color: #e9ecef;
+            border-color: #1a73e8;
+        }
+        .option.selected {
+            background-color: #1a73e8;
+            color: white;
+            border-color: #1557b0;
+        }
+        .progress {
+            text-align: center;
+            margin: 10px 0;
+            color: #666;
+            font-size: 16px;
+        }
+        @media (max-width: 480px) {
+            .container {
+                padding: 10px;
+            }
+            .option {
+                padding: 12px;
+                font-size: 15px;
+				font-weight: bold;
+            }
+            .question-text {
+                font-size: 17px;
+				font-weight: bold;
+                padding: 12px;
+            }
+            .timer {
+                font-size: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Mishail's Trivia Game</h1>
+
+        <div id="login-form" class="login-form">
+            <input type="text" id="player-name" placeholder="Enter your name" maxlength="20">
+            <button onclick="login()">Join Game</button>
+        </div>
+
+        <div id="waiting-screen" style="display: none;">
+            <h2>Welcome!</h2>
+            <p style="text-align: center;">Waiting for the game to start...</p>
+        </div>
+
+        <div id="game-area" class="game-area">
+            <div class="progress">
+                Question <span id="current-number">1</span> of <span id="total-questions">0</span>
+            </div>
+
+            <div class="question-container">
+                <div class="timer" id="timer">
+                    Time: <span id="countdown">10</span>s
+                </div>
+                <div class="question-text" id="current-question"></div>
+                <div class="options-container" id="options-container"></div>
+            </div>
+        </div>
+
+        <div id="completion-screen" style="display: none;">
+            <h2>Game Completed!</h2>
+            <p style="text-align: center;">Please wait for final results...</p>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        let playerName = '';
+        let questions = [];
+        let currentQuestionIndex = 0;
+        let currentAnswer = null;
+        let timer;
+        let timeLeft = 10;
+
+        function connectWebSocket() {
+            ws = new WebSocket(`ws://${window.location.hostname}:3000`);
+            ws.onopen = () => {};
+            ws.onclose = () => setTimeout(connectWebSocket, 3000);
+            ws.onmessage = (event) => handleWebSocketMessage(JSON.parse(event.data));
+        }
+
+        function login() {
+            playerName = document.getElementById('player-name').value.trim();
+            if (playerName.length >= 2) {
+                ws.send(JSON.stringify({
+                    type: 'player_connect',
+                    name: playerName
+                }));
+                document.getElementById('login-form').style.display = 'none';
+                document.getElementById('waiting-screen').style.display = 'block';
+            } else {
+                alert('Please enter a name with at least 2 characters');
+            }
+        }
+
+        function handleWebSocketMessage(data) {
+            switch (data.type) {
+                case 'game_started':
+                    startGame(data.questions);
+                    break;
+                case 'game_ended':
+                    showCompletionScreen();
+                    break;
+                case 'force_disconnect':
+                    window.location.reload();
+                    break;
+            }
+        }
+
+        function startGame(receivedQuestions) {
+            questions = receivedQuestions;
+            currentQuestionIndex = 0;
+            
+            document.getElementById('waiting-screen').style.display = 'none';
+            document.getElementById('game-area').style.display = 'block';
+            document.getElementById('total-questions').textContent = questions.length;
+            
+            displayQuestion(currentQuestionIndex);
+        }
+
+        function displayQuestion(index) {
+            if (index >= questions.length) {
+                showCompletionScreen();
+                return;
+            }
+
+            const question = questions[index];
+            document.getElementById('current-number').textContent = index + 1;
+            document.getElementById('current-question').textContent = question.question;
+            currentAnswer = null;
+            
+            const optionsContainer = document.getElementById('options-container');
+            optionsContainer.innerHTML = '';
+            
+            question.options.forEach(option => {
+                const optionElement = document.createElement('div');
+                optionElement.className = 'option';
+                optionElement.textContent = option;
+                optionElement.onclick = () => selectAnswer(option);
+                optionsContainer.appendChild(optionElement);
+            });
+
+            startTimer();
+        }
+
+        function selectAnswer(answer) {
+            if (currentAnswer !== null || timeLeft <= 0) return;
+            
+            currentAnswer = answer;
+            
+            document.querySelectorAll('.option').forEach(opt => {
+                opt.classList.remove('selected');
+                if (opt.textContent === answer) {
+                    opt.classList.add('selected');
+                }
+            });
+
+            // Send answer and immediately move to next question
+            ws.send(JSON.stringify({
+                type: 'submit_answer',
+                playerName: playerName,
+                questionIndex: currentQuestionIndex,
+                answer: answer
+            }));
+
+            // Brief delay before moving to next question
+            setTimeout(() => {
+                clearInterval(timer);
+                currentQuestionIndex++;
+                displayQuestion(currentQuestionIndex);
+            }, 300);
+        }
+
+        function startTimer() {
+            timeLeft = 10;
+            const timerElement = document.querySelector('.timer');
+            const countdownElement = document.getElementById('countdown');
+            
+            clearInterval(timer);
+            timerElement.classList.remove('urgent');
+            countdownElement.textContent = timeLeft;
+            
+            timer = setInterval(() => {
+                timeLeft--;
+                countdownElement.textContent = timeLeft;
+                
+                if (timeLeft <= 3) {
+                    timerElement.classList.add('urgent');
+                }
+                
+                if (timeLeft <= 0) {
+                    clearInterval(timer);
+                    if (currentAnswer === null) {
+                        ws.send(JSON.stringify({
+                            type: 'submit_answer',
+                            playerName: playerName,
+                            questionIndex: currentQuestionIndex,
+                            answer: null
+                        }));
+                        
+                        currentQuestionIndex++;
+                        displayQuestion(currentQuestionIndex);
+                    }
+                }
+            }, 1000);
+        }
+
+        function showCompletionScreen() {
+            document.getElementById('game-area').style.display = 'none';
+            document.getElementById('completion-screen').style.display = 'block';
+            clearInterval(timer);
+        }
+
+        // Initialize WebSocket connection
+        connectWebSocket();
+    </script>
+</body>
+</html>
