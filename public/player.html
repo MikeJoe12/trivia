@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mishail's Trivia Game</title>
+    <script src="/socket.io/socket.io.js"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -127,11 +128,11 @@
             .option {
                 padding: 12px;
                 font-size: 15px;
-				font-weight: bold;
+                font-weight: bold;
             }
             .question-text {
                 font-size: 17px;
-				font-weight: bold;
+                font-weight: bold;
                 padding: 12px;
             }
             .timer {
@@ -175,28 +176,23 @@
     </div>
 
     <script>
-        let ws;
+        // Connect to Socket.IO
+        const socket = io();
+
         let playerName = '';
+        let playerSessionName = ''; // The name actually used in the game (might be modified)
         let questions = [];
         let currentQuestionIndex = 0;
         let currentAnswer = null;
         let timer;
         let timeLeft = 10;
 
-        function connectWebSocket() {
-            ws = new WebSocket(`ws://${window.location.hostname}:3000`);
-            ws.onopen = () => {};
-            ws.onclose = () => setTimeout(connectWebSocket, 3000);
-            ws.onmessage = (event) => handleWebSocketMessage(JSON.parse(event.data));
-        }
-
         function login() {
             playerName = document.getElementById('player-name').value.trim();
             if (playerName.length >= 2) {
-                ws.send(JSON.stringify({
-                    type: 'player_connect',
-                    name: playerName
-                }));
+                // Emit player connection event
+                socket.emit('player_connect', playerName);
+
                 document.getElementById('login-form').style.display = 'none';
                 document.getElementById('waiting-screen').style.display = 'block';
             } else {
@@ -204,22 +200,21 @@
             }
         }
 
-        function handleWebSocketMessage(data) {
-            switch (data.type) {
-                case 'game_started':
-                    startGame(data.questions);
-                    break;
-                case 'game_ended':
-                    showCompletionScreen();
-                    break;
-                case 'force_disconnect':
-                    window.location.reload();
-                    break;
+        // Listen for name confirmation (in case the original name was modified)
+        socket.on('player_name_confirmed', (confirmedName) => {
+            playerSessionName = confirmedName;
+            
+            // Update the waiting screen to show the confirmed name
+            if (confirmedName !== playerName) {
+                const waitingScreen = document.getElementById('waiting-screen');
+                const p = waitingScreen.querySelector('p');
+                p.textContent = `Your game name is: ${confirmedName}. Waiting for the game to start...`;
             }
-        }
+        });
 
-        function startGame(receivedQuestions) {
-            questions = receivedQuestions;
+        // Listen for game start
+        socket.on('game_started', (data) => {
+            questions = data.questions;
             currentQuestionIndex = 0;
             
             document.getElementById('waiting-screen').style.display = 'none';
@@ -227,7 +222,17 @@
             document.getElementById('total-questions').textContent = questions.length;
             
             displayQuestion(currentQuestionIndex);
-        }
+        });
+
+        // Listen for game end
+        socket.on('game_ended', () => {
+            showCompletionScreen();
+        });
+
+        // Listen for force disconnect
+        socket.on('force_disconnect', () => {
+            window.location.reload();
+        });
 
         function displayQuestion(index) {
             if (index >= questions.length) {
@@ -266,13 +271,12 @@
                 }
             });
 
-            // Send answer and immediately move to next question
-            ws.send(JSON.stringify({
-                type: 'submit_answer',
-                playerName: playerName,
+            // Send answer 
+            socket.emit('submit_answer', {
+                playerName: playerSessionName, // Use the session name
                 questionIndex: currentQuestionIndex,
-                answer: answer
-            }));
+                answer
+            });
 
             // Brief delay before moving to next question
             setTimeout(() => {
@@ -302,12 +306,11 @@
                 if (timeLeft <= 0) {
                     clearInterval(timer);
                     if (currentAnswer === null) {
-                        ws.send(JSON.stringify({
-                            type: 'submit_answer',
-                            playerName: playerName,
+                        socket.emit('submit_answer', {
+                            playerName: playerSessionName, // Use the session name
                             questionIndex: currentQuestionIndex,
                             answer: null
-                        }));
+                        });
                         
                         currentQuestionIndex++;
                         displayQuestion(currentQuestionIndex);
@@ -321,9 +324,6 @@
             document.getElementById('completion-screen').style.display = 'block';
             clearInterval(timer);
         }
-
-        // Initialize WebSocket connection
-        connectWebSocket();
     </script>
 </body>
 </html>

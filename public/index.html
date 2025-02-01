@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trivia Game - Host Panel</title>
+    <title>Mishail's Trivia Game</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -214,28 +215,30 @@
     </div>
 
     <script>
-        let ws;
+        // Connect to Socket.IO
+        const socket = io();
+
         let questions = [];
         let isGameActive = false;
         let currentFileName = ''; // Variable to store the filename
 
-        function connectWebSocket() {
-            ws = new WebSocket(`ws://${window.location.hostname}:3000`);
-            
-            ws.onopen = () => {
-                console.log('Connected to server');
-                ws.send(JSON.stringify({ type: 'host_connect' }));
-            };
+        // Connect to the server as a host
+        socket.emit('host_connect');
 
-            ws.onclose = () => {
-                setTimeout(connectWebSocket, 3000);
-            };
+        // Listen for player list updates
+        socket.on('player_list', (data) => {
+            updatePlayerList(data.players);
+        });
 
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                handleWebSocketMessage(data);
-            };
-        }
+        // Listen for game end
+        socket.on('game_ended', (data) => {
+            isGameActive = false;
+            updatePlayerList(data.results);
+            showResults(data.results, questions);
+            document.getElementById('startButton').disabled = false;
+            document.getElementById('endButton').disabled = true;
+            document.getElementById('resultsSection').style.display = 'block';
+        });
 
         async function handleFileUpload(event) {
             const file = event.target.files[0];
@@ -288,22 +291,6 @@
             }
         }
 
-        function handleWebSocketMessage(data) {
-            switch (data.type) {
-                case 'player_list':
-                    updatePlayerList(data.players);
-                    break;
-                case 'game_ended':
-                    isGameActive = false;
-                    updatePlayerList(data.results);
-                    showResults(data.results, questions);
-                    document.getElementById('startButton').disabled = false;
-                    document.getElementById('endButton').disabled = true;
-                    document.getElementById('resultsSection').style.display = 'block';
-                    break;
-            }
-        }
-
         function updatePlayerList(players) {
             const playerList = document.getElementById('playerList');
             playerList.innerHTML = players.map(player => `
@@ -312,6 +299,49 @@
                     <span>${player.score || 0} points</span>
                 </div>
             `).join('');
+        }
+
+        function startGame() {
+            if (questions.length === 0) {
+                alert('Please upload questions first');
+                return;
+            }
+
+            isGameActive = true;
+            document.getElementById('startButton').disabled = true;
+            document.getElementById('endButton').disabled = false;
+            document.getElementById('resultsSection').style.display = 'none';
+
+            socket.emit('start_game', questions);
+        }
+
+        function endGame() {
+            if (!isGameActive) return;
+            
+            isGameActive = false;
+            document.getElementById('endButton').disabled = true;
+            socket.emit('end_game');
+        }
+
+        function resetGame() {
+            if (confirm('Are you sure you want to reset the game? This will disconnect all players.')) {
+                // Clear local state
+                questions = [];
+                isGameActive = false;
+                currentFileName = '';
+                
+                // Reset UI elements
+                document.getElementById('startButton').disabled = true;
+                document.getElementById('endButton').disabled = true;
+                document.getElementById('questionFile').value = '';
+                document.getElementById('fileInfo').textContent = '';
+                document.getElementById('playerList').innerHTML = '';
+                document.getElementById('resultsSection').style.display = 'none';
+                document.getElementById('questionAnalysis').innerHTML = '';
+
+                // Tell server to reset and force disconnect all players
+                socket.emit('reset_game');
+            }
         }
 
         function showResults(results, questionsList) {
@@ -358,55 +388,6 @@
 
             document.getElementById('questionAnalysis').innerHTML = analysisHtml;
         }
-
-        function startGame() {
-            if (questions.length === 0) {
-                alert('Please upload questions first');
-                return;
-            }
-
-            isGameActive = true;
-            document.getElementById('startButton').disabled = true;
-            document.getElementById('endButton').disabled = false;
-            document.getElementById('resultsSection').style.display = 'none';
-
-            ws.send(JSON.stringify({
-                type: 'start_game',
-                questions: questions
-            }));
-        }
-
-        function endGame() {
-            if (!isGameActive) return;
-            
-            isGameActive = false;
-            document.getElementById('endButton').disabled = true;
-            ws.send(JSON.stringify({ type: 'end_game' }));
-        }
-
-        function resetGame() {
-            if (confirm('Are you sure you want to reset the game? This will disconnect all players.')) {
-                // Clear local state
-                questions = [];
-                isGameActive = false;
-                currentFileName = '';
-                
-                // Reset UI elements
-                document.getElementById('startButton').disabled = true;
-                document.getElementById('endButton').disabled = true;
-                document.getElementById('questionFile').value = '';
-                document.getElementById('fileInfo').textContent = '';
-                document.getElementById('playerList').innerHTML = '';
-                document.getElementById('resultsSection').style.display = 'none';
-                document.getElementById('questionAnalysis').innerHTML = '';
-
-                // Tell server to reset and force disconnect all players
-                ws.send(JSON.stringify({ type: 'reset_game' }));
-            }
-        }
-
-        // Initialize WebSocket connection
-        connectWebSocket();
     </script>
 </body>
 </html>
